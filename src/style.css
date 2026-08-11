@@ -1,0 +1,157 @@
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --bg: #ebebf8;
+  --ink: #17171f;
+  --accent: #4b4bee;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- Approach section ---------- */
+
+.approach {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 6rem;
+  align-items: start;
+  max-width: 100rem;
+  margin: 0 auto;
+  padding: 5rem 3rem 0;
+}
+
+/* Slots reserve layout space; the card Flips between them */
+.media-slot {
+  aspect-ratio: 16 / 10;
+}
+
+/* Left: image slot, pushed down from the top */
+.media-slot--home {
+  margin-top: 6rem;
+}
+
+.media-card {
+  width: 100%;
+  height: 100%;
+  border-radius: 1.5rem;
+  overflow: hidden;
+  background: var(--accent);
+  position: relative;
+}
+
+.media-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  filter: grayscale(1) contrast(1.05);
+}
+
+/* Blue duotone wash over the grayscale image */
+.media-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--accent);
+  mix-blend-mode: color;
+  pointer-events: none;
+}
+
+/* Right: body copy + pill button */
+.approach__content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3.5rem;
+  padding-top: 3rem;
+}
+
+.approach__text {
+  font-size: clamp(1.25rem, 1.8vw, 1.75rem);
+  line-height: 1.45;
+  max-width: 34em;
+}
+
+.pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.1rem 2rem;
+  background: #fff;
+  color: var(--ink);
+  border-radius: 999px;
+  text-decoration: none;
+  font-size: 0.95rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition:
+    transform 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+.pill-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px rgba(23, 23, 31, 0.12);
+}
+
+.pill-btn__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--ink);
+}
+
+/* ---------- Showcase section (Flip target) ---------- */
+
+.showcase {
+  padding: 1.5rem 0 6rem;
+}
+
+/* Container matching the approach section; the slot fills its full width */
+.showcase__container {
+  width: 100%;
+  max-width: 100rem;
+  margin: 0 auto;
+  padding: 0 3rem;
+}
+
+.showcase .media-slot--away {
+  width: 100%;
+  height: 75vh;
+  aspect-ratio: auto;
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 900px) {
+  .approach {
+    grid-template-columns: 1fr;
+    row-gap: 3rem;
+    padding: 3rem 1.5rem 5rem;
+    min-height: auto;
+  }
+
+  /* Content first, image below on small screens */
+  .media-slot--home {
+    order: 2;
+    margin-top: 0;
+  }
+
+  .approach__content {
+    order: 1;
+    gap: 3rem;
+    padding-top: 0;
+  }
+}
