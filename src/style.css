@@ -19,6 +19,18 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* ---------- Spacer sections (test runway for the snap) ---------- */
+
+.spacer {
+  height: 100vh;
+  display: grid;
+  place-items: center;
+  color: rgba(23, 23, 31, 0.35);
+  font-size: 1rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
 /* ---------- Approach section ---------- */
 
 .approach {
@@ -38,7 +50,7 @@ body {
 
 /* Left: image slot, pushed down from the top */
 .media-slot--home {
-  margin-top: 6rem;
+  margin-top: 10rem;
 }
 
 .media-card {
@@ -48,6 +60,11 @@ body {
   overflow: hidden;
   background: var(--accent);
   position: relative;
+  /* Promote to its own compositor layer for the Flip; also keeps the
+     ::after blend-mode contained to this stacking context */
+  will-change: transform;
+  backface-visibility: hidden;
+  transform: translateZ(0);
 }
 
 .media-card img {
@@ -56,6 +73,7 @@ body {
   object-fit: cover;
   display: block;
   filter: grayscale(1) contrast(1.05);
+  backface-visibility: hidden;
 }
 
 /* Blue duotone wash over the grayscale image */
@@ -80,6 +98,7 @@ body {
 .approach__text {
   font-size: clamp(1.25rem, 1.8vw, 1.75rem);
   line-height: 1.45;
+  letter-spacing: -0.05em;
   max-width: 34em;
 }
 
