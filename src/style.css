@@ -166,7 +166,9 @@ body {
 
 .media-card.gl-active img,
 .media-card.gl-active::after {
-  opacity: 0;
+  /* visibility (not opacity) so the browser skips painting the
+     filtered image entirely; the box still exists for layout/Flip */
+  visibility: hidden;
 }
 
 /* Right: body copy + pill button */

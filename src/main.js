@@ -1,6 +1,5 @@
 import "./style.css";
 import * as THREE from "three";
-import GUI from "lil-gui";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { Flip } from "gsap/Flip";
@@ -66,6 +65,7 @@ function moveMediaTo(slot, duration = SNAP_DURATION) {
     value: slot === awaySlot && deform.colorReveal ? 1 : 0,
     duration,
     ease: "power3.in",
+    onUpdate: markGLDirty,
   });
 }
 
@@ -93,7 +93,13 @@ let booted = false;
 
 const siteHeader = document.querySelector(".site-header");
 
+/* home/away are absolute page offsets, so they only change on layout
+   changes — cache them instead of forcing layout reads on every wheel
+   and scroll event (the cache clears on resize) */
+let zoneCache = null;
+
 function zonePoints() {
+  if (zoneCache) return zoneCache;
   const y = lenis.scroll;
   /* home sits above the hero by the header's height, so snapping up
      lands at the page top with the header in view */
@@ -103,7 +109,8 @@ function zonePoints() {
     (siteHeader?.offsetHeight ?? 0);
   const rect = awaySlot.getBoundingClientRect();
   const away = rect.top + y - (window.innerHeight - rect.height) / 2;
-  return { home, away };
+  zoneCache = { home, away };
+  return zoneCache;
 }
 
 /* Recent wheel intensity → snap duration. A lazy nudge gets the full
@@ -225,9 +232,18 @@ document.body.appendChild(glCanvas);
 const renderer = new THREE.WebGLRenderer({
   canvas: glCanvas,
   alpha: true,
-  antialias: true,
+  /* the rounded-box SDF in the fragment shader already feathers every
+     visible edge of the plane, so MSAA only costs fill rate at 2x DPR */
+  antialias: false,
+  powerPreference: "high-performance",
 });
 renderer.setClearColor(0x000000, 0);
+
+/* render-on-demand: the scene only re-renders when a plane is moving
+   or something GL-visible changed (uniform tween, resize, GUI edit).
+   The last presented frame stays on the canvas while idle. */
+let glDirty = true;
+const markGLDirty = () => (glDirty = true);
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(45, 1, 10, 4000);
@@ -242,7 +258,11 @@ function sizeGL() {
   camera.updateProjectionMatrix();
 }
 sizeGL();
-window.addEventListener("resize", sizeGL);
+window.addEventListener("resize", () => {
+  zoneCache = null;
+  sizeGL();
+  markGLDirty();
+});
 
 const VERTEX_SHADER = /* glsl */ `
     uniform vec4 uVel;
@@ -433,6 +453,7 @@ function createClothPlane({
         mesh.visible = true;
         /* hand rendering over to WebGL; the DOM card keeps layout */
         el.classList.add("gl-active");
+        markGLDirty();
         resolve();
       },
       undefined,
@@ -501,6 +522,23 @@ function createClothPlane({
     const meanY = edgeVel[1] + 0.5 * edgeVel[3];
     mesh.rotation.x = meanY * deform.tilt * s * 0.002;
     mesh.rotation.y = -meanX * deform.tilt * s * 0.002;
+
+    /* true while the card is visibly in motion: mid-tween, its rect
+       moved this frame (scroll/resize), or the springs still settling.
+       uTime only shows through velocity-scaled terms, so a still plane
+       renders identically frame to frame and can skip the draw. */
+    return (
+      active ||
+      raw[0] !== 0 ||
+      raw[1] !== 0 ||
+      raw[2] !== 0 ||
+      raw[3] !== 0 ||
+      Math.abs(edgeVel[0]) +
+        Math.abs(edgeVel[1]) +
+        Math.abs(edgeVel[2]) +
+        Math.abs(edgeVel[3]) >
+        0.01
+    );
   }
 
   const plane = {
@@ -572,53 +610,62 @@ const CORNERS = {
   center: [0.5, 0.5],
 };
 
-const gui = new GUI({ title: "Deformation" });
+/* the panel only exists behind ?debug, so lil-gui is loaded on demand
+   and stays out of the main bundle for regular visitors */
+if (new URLSearchParams(location.search).has("debug")) {
+  import("lil-gui").then(({ default: GUI }) => {
+    const gui = new GUI({ title: "Deformation" });
 
-/* hidden by default — open the site with ?debug to show the panel */
-if (!new URLSearchParams(location.search).has("debug")) gui.hide();
+    const fPull = gui.addFolder("Pull");
+    fPull.add(deform, "intensity", 0, 30, 0.01).name("pull intensity");
+    fPull.add(deform, "maxPull", 0, 1200, 1).name("max pull (px)");
+    fPull.add(deform, "lagPower", 0.1, 6, 0.01).name("lag curve");
+    fPull.add(deform, "corner", Object.keys(CORNERS)).name("grab corner");
 
-const fPull = gui.addFolder("Pull");
-fPull.add(deform, "intensity", 0, 30, 0.01).name("pull intensity");
-fPull.add(deform, "maxPull", 0, 1200, 1).name("max pull (px)");
-fPull.add(deform, "lagPower", 0.1, 6, 0.01).name("lag curve");
-fPull.add(deform, "corner", Object.keys(CORNERS)).name("grab corner");
+    const fSpring = gui.addFolder("Spring");
+    fSpring.add(deform, "stiffness", 0.005, 0.6, 0.005).name("stiffness");
+    fSpring.add(deform, "damping", 0.4, 0.995, 0.005).name("damping");
 
-const fSpring = gui.addFolder("Spring");
-fSpring.add(deform, "stiffness", 0.005, 0.6, 0.005).name("stiffness");
-fSpring.add(deform, "damping", 0.4, 0.995, 0.005).name("damping");
+    const fDepth = gui.addFolder("Depth");
+    fDepth.add(deform, "zDip", 0, 5, 0.01).name("z dip");
+    fDepth.add(deform, "bow", 0, 5, 0.01).name("bow");
+    fDepth.add(deform, "tilt", 0, 2, 0.01).name("3d tilt");
+    fDepth.add(deform, "shade", 0, 2, 0.01).name("fold shading");
 
-const fDepth = gui.addFolder("Depth");
-fDepth.add(deform, "zDip", 0, 5, 0.01).name("z dip");
-fDepth.add(deform, "bow", 0, 5, 0.01).name("bow");
-fDepth.add(deform, "tilt", 0, 2, 0.01).name("3d tilt");
-fDepth.add(deform, "shade", 0, 2, 0.01).name("fold shading");
+    const fCloth = gui.addFolder("Cloth detail");
+    fCloth.add(deform, "rippleAmp", 0, 500, 1).name("ripple amount");
+    fCloth.add(deform, "rippleFreq", 0, 25, 0.05).name("ripple waves");
+    fCloth.add(deform, "rippleSpeed", 0, 80, 0.1).name("ripple speed");
+    fCloth.add(deform, "wrinkleAmp", 0, 400, 1).name("wrinkle amount");
+    fCloth.add(deform, "wrinkleFreq", 1, 100, 0.5).name("wrinkle density");
 
-const fCloth = gui.addFolder("Cloth detail");
-fCloth.add(deform, "rippleAmp", 0, 500, 1).name("ripple amount");
-fCloth.add(deform, "rippleFreq", 0, 25, 0.05).name("ripple waves");
-fCloth.add(deform, "rippleSpeed", 0, 80, 0.1).name("ripple speed");
-fCloth.add(deform, "wrinkleAmp", 0, 400, 1).name("wrinkle amount");
-fCloth.add(deform, "wrinkleFreq", 1, 100, 0.5).name("wrinkle density");
+    gui.add(deform, "colorReveal").name("colour reveal");
+    gui
+      .add(
+        {
+          copy: () => {
+            const json = JSON.stringify(deform, null, 2);
+            navigator.clipboard?.writeText(json).catch(() => {});
+            console.log("deform config:\n" + json);
+          },
+        },
+        "copy",
+      )
+      .name("copy config");
+    gui.add({ reset: () => gui.reset() }, "reset").name("reset all");
 
-gui.add(deform, "colorReveal").name("colour reveal");
-gui
-  .add(
-    {
-      copy: () => {
-        const json = JSON.stringify(deform, null, 2);
-        navigator.clipboard?.writeText(json).catch(() => {});
-        console.log("deform config:\n" + json);
-      },
-    },
-    "copy",
-  )
-  .name("copy config");
-gui.add({ reset: () => gui.reset() }, "reset").name("reset all");
+    /* slider edits must show even while every plane is at rest */
+    gui.onChange(markGLDirty);
+  });
+}
 
-/* one ticker drives every cloth plane */
+/* one ticker drives every cloth plane; the draw is skipped on frames
+   where no plane moved and nothing GL-visible changed */
 gsap.ticker.add((time) => {
-  for (const p of clothPlanes) p.update(time);
-  renderer.render(scene, camera);
+  let needsRender = glDirty;
+  glDirty = false;
+  for (const p of clothPlanes) needsRender = p.update(time) || needsRender;
+  if (needsRender) renderer.render(scene, camera);
 });
 
 /* ---------- Loader ----------
@@ -758,9 +805,11 @@ function finishLoader() {
       value: 0,
       duration: 0.55,
       delay: 0.45,
+      onUpdate: markGLDirty,
       onComplete: () => {
         scene.remove(p.mesh);
         clothPlanes.splice(clothPlanes.indexOf(p), 1);
+        markGLDirty();
       },
     });
   });
