@@ -99,7 +99,7 @@ body {
 .approach__title {
   font-size: clamp(2.5rem, 4.5vw, 4.25rem);
   font-weight: 500;
-  line-height: 0.9;
+  line-height: 1.1;
   letter-spacing: -0.03em;
 }
 
@@ -286,7 +286,7 @@ body {
 
 .loader__stack {
   position: relative;
-  width: min(44rem, 72vw);
+  width: min(30rem, 55vw);
   aspect-ratio: 16 / 10;
 }
 

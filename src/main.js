@@ -5,9 +5,13 @@ import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { Flip } from "gsap/Flip";
 import { CustomEase } from "gsap/CustomEase";
+import { SplitText } from "gsap/SplitText";
 import Lenis from "lenis";
 
-gsap.registerPlugin(ScrollTrigger, Flip, CustomEase);
+gsap.registerPlugin(ScrollTrigger, Flip, CustomEase, SplitText);
+
+/* styles are applied (style.css import above ran) — reveal the page */
+document.documentElement.classList.add("app-ready");
 
 /* Hard expo-style inOut: slow start, softer mid-speed, slow settle.
    Based on expo.inOut = cubic-bezier(0.87, 0, 0.13, 1) — pulling
@@ -538,22 +542,22 @@ const heroPlane = createClothPlane({
 
 const deform = {
   /* pull */
-  intensity: 18.69, // edge velocity -> trail multiplier
-  maxPull: 600, // px cap so it never folds over
+  intensity: 10.83, // edge velocity -> trail multiplier
+  maxPull: 551, // px cap so it never folds over
   lagPower: 0.73, // corner whip curve (higher = corner leads harder)
   corner: "top-right",
   /* spring */
-  stiffness: 0.14, // how fast the cloth reacts
-  damping: 0.505, // lower = more jelly wobble on settle
+  stiffness: 0.085, // how fast the cloth reacts
+  damping: 0.4, // lower = more jelly wobble on settle
   /* depth */
-  zDip: 2.25, // trailing side falls away from camera
+  zDip: 1.5, // trailing side falls away from camera
   bow: 0.17, // edges arc perpendicular to the motion
   tilt: 0.24, // whole-plane 3D lean with the motion
-  shade: 0.85, // darken folds that dip away
+  shade: 0.38, // darken folds that dip away
   /* cloth detail */
-  rippleAmp: 17, // travelling wave height (px)
-  rippleFreq: 2.05, // waves across the surface
-  rippleSpeed: 20.3, // how fast the wave travels
+  rippleAmp: 29, // travelling wave height (px)
+  rippleFreq: 1.45, // waves across the surface
+  rippleSpeed: 13.5, // how fast the wave travels
   wrinkleAmp: 0, // fine crumple height (px)
   wrinkleFreq: 15, // crumple density
   /* colour */
@@ -569,6 +573,9 @@ const CORNERS = {
 };
 
 const gui = new GUI({ title: "Deformation" });
+
+/* hidden by default — open the site with ?debug to show the panel */
+if (!new URLSearchParams(location.search).has("debug")) gui.hide();
 
 const fPull = gui.addFolder("Pull");
 fPull.add(deform, "intensity", 0, 30, 0.01).name("pull intensity");
@@ -625,13 +632,23 @@ const loaderCount = document.querySelector(".loader__count");
 const loaderSlot = document.querySelector(".media-slot--loader");
 const stackCards = gsap.utils.toArray(".media-card--stack");
 
-const heroBits = [
-  document.querySelector(".site-header"),
-  document.querySelector(".approach__title"),
-  document.querySelector(".approach__text"),
-  document.querySelector(".approach__content .pill-btn"),
-  document.querySelector(".approach__meta"),
-];
+/* Premium entrance setup: title + paragraph split into masked lines
+   (each line clips inside its own overflow wrapper and rises in).
+   Splitting happens now — system font stack, so no reflow risk.
+   The header only fades: any movement on it reads as page scroll. */
+const heroHeader = document.querySelector(".site-header");
+const pillBtn = document.querySelector(".approach__content .pill-btn");
+const metaEl = document.querySelector(".approach__meta");
+const statEls = gsap.utils.toArray(".approach__stat");
+
+const titleSplit = new SplitText(".approach__title", {
+  type: "lines",
+  mask: "lines",
+});
+const textSplit = new SplitText(".approach__text", {
+  type: "lines",
+  mask: "lines",
+});
 
 /* freeze the page AT THE TOP and stage the hero card on the stack:
    no scrolling (or restored scroll position) until the hero lands */
@@ -640,7 +657,12 @@ window.scrollTo(0, 0);
 lenis.scrollTo(0, { immediate: true, force: true });
 lenis.stop();
 document.documentElement.style.overflow = "hidden";
-gsap.set(heroBits, { opacity: 0, y: 40 });
+gsap.set(heroHeader, { opacity: 0 });
+/* lines hide inside their masks; CTA and stats sit low + transparent */
+gsap.set([...titleSplit.lines, ...textSplit.lines], { yPercent: 110 });
+gsap.set(pillBtn, { opacity: 0, y: 24 });
+gsap.set(metaEl, { opacity: 0 });
+gsap.set(statEls, { opacity: 0, y: 24 });
 loaderSlot.appendChild(mediaCard);
 /* hero flies in from the right (odd index) → pulled by its left edge */
 heroPlane.grabCorner = "top-left";
@@ -664,8 +686,16 @@ const stackPlanes = stackCards.map((card, i) =>
 /* stack images show their original colours, no duotone */
 stackPlanes.forEach((p) => (p.uniforms.uReveal.value = 1));
 
+/* park every flyer offscreen right away — otherwise cards whose
+   texture loads early sit visible in the centre while the rest of
+   the images are still downloading */
+const flyers = [...stackCards, mediaCard];
+flyers.forEach((el, i) => {
+  const side = i % 2 ? 1 : -1;
+  gsap.set(el, { x: side * window.innerWidth });
+});
+
 Promise.all(clothPlanes.map((p) => p.ready)).then(() => {
-  const flyers = [...stackCards, mediaCard];
   /* mostly sequential: each image lands on top of the previous one */
   const STAGGER = 0.45;
   const FLIGHT = 0.9;
@@ -735,15 +765,18 @@ function finishLoader() {
     });
   });
 
-  /* hero content rides in with the landing image */
-  gsap.to(heroBits, {
-    opacity: 1,
-    y: 0,
-    duration: 1.2,
-    ease: "hardExpo",
-    stagger: 0.08,
-    delay: 0.65,
-  });
+  /* hero content rides in with the landing image on one timeline:
+     masked title lines rise first, the paragraph follows, then the
+     CTA and stats cascade in. The header only fades so nothing
+     reads as a page scroll. */
+  gsap
+    .timeline({ delay: 0.65, defaults: { ease: "hardExpo" } })
+    .to(heroHeader, { opacity: 1, duration: 1.1, ease: "power2.out" }, 0)
+    .to(titleSplit.lines, { yPercent: 0, duration: 1.2, stagger: 0.09 }, 0)
+    .to(textSplit.lines, { yPercent: 0, duration: 1.1, stagger: 0.05 }, 0.2)
+    .to(pillBtn, { opacity: 1, y: 0, duration: 1 }, 0.55)
+    .to(metaEl, { opacity: 1, duration: 0.9, ease: "power2.out" }, 0.65)
+    .to(statEls, { opacity: 1, y: 0, duration: 1, stagger: 0.09 }, 0.7);
 
   /* hand the page back once the flight has landed; the full tuned
      cloth + GUI grab corner come back for the scroll-snap flights */

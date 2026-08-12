@@ -5,6 +5,19 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MADEFORAWARD® — Digital Art Studio</title>
+    <style>
+      /* critical: keep the page invisible (on the theme colour) until
+         the bundle's styles are applied — no unstyled flash */
+      html {
+        background: #ebebf8;
+      }
+      body {
+        visibility: hidden;
+      }
+      html.app-ready body {
+        visibility: visible;
+      }
+    </style>
   </head>
   <body>
     <header class="site-header">
@@ -67,7 +80,7 @@
     </section>
 
     <section class="spacer">
-      <p>Keep scrolling</p>
+      <p>Thanks</p>
     </section>
 
     <!-- Preloader: images fly in from the sides and stack in the
