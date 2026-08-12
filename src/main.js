@@ -26,8 +26,8 @@ gsap.ticker.lagSmoothing(0);
 /* Base duration, shared by the Flip and the snap scroll so both run
    in lockstep: same start, same duration, same curve. A fast wheel
    shortens it (see snapDurationFor) down to SNAP_DURATION_MIN. */
-const SNAP_DURATION = 1.0;
-const SNAP_DURATION_MIN = 0.2;
+const SNAP_DURATION = 1.5;
+const SNAP_DURATION_MIN = 0.6;
 
 const mediaCard = document.querySelector(".media-card");
 const homeSlot = document.querySelector(".media-slot--home");
