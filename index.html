@@ -18,7 +18,7 @@
 
     <section class="approach">
       <div class="media-slot media-slot--home">
-        <figure class="media-card">
+        <figure class="media-card media-card--hero">
           <img
             src="https://images.unsplash.com/photo-1490750967868-88aa4486c946?q=80&w=1600&auto=format&fit=crop"
             alt="Macro shot of flowers in blue tones"
@@ -69,6 +69,30 @@
     <section class="spacer">
       <p>Keep scrolling</p>
     </section>
+
+    <!-- Preloader: images fly in from the sides and stack in the
+         center; the hero image lands on top and Flips into the hero -->
+    <div class="loader">
+      <div class="loader__stack">
+        <figure class="media-card media-card--stack">
+          <img src="https://picsum.photos/seed/mfa1/1280/800" alt="" />
+        </figure>
+        <figure class="media-card media-card--stack">
+          <img src="https://picsum.photos/seed/mfa2/1280/800" alt="" />
+        </figure>
+        <figure class="media-card media-card--stack">
+          <img src="https://picsum.photos/seed/mfa3/1280/800" alt="" />
+        </figure>
+        <figure class="media-card media-card--stack">
+          <img src="https://picsum.photos/seed/mfa4/1280/800" alt="" />
+        </figure>
+        <figure class="media-card media-card--stack">
+          <img src="https://picsum.photos/seed/mfa5/1280/800" alt="" />
+        </figure>
+        <div class="media-slot media-slot--loader"></div>
+      </div>
+    </div>
+    <div class="loader__count">0%</div>
 
     <script type="module" src="/src/main.js"></script>
   </body>

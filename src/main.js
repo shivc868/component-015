@@ -29,7 +29,7 @@ gsap.ticker.lagSmoothing(0);
 const SNAP_DURATION = 1.5;
 const SNAP_DURATION_MIN = 0.6;
 
-const mediaCard = document.querySelector(".media-card");
+const mediaCard = document.querySelector(".media-card--hero");
 const homeSlot = document.querySelector(".media-slot--home");
 const awaySlot = document.querySelector(".media-slot--away");
 const approachSection = document.querySelector(".approach");
@@ -58,7 +58,7 @@ function moveMediaTo(slot, duration = SNAP_DURATION) {
      to duotone on the way home). power3.in keeps the duotone until
      late in the flight, then sweeps quickly — like the reference. */
   revealTween?.kill();
-  revealTween = gsap.to(uniforms.uReveal, {
+  revealTween = gsap.to(heroPlane.uniforms.uReveal, {
     value: slot === awaySlot && deform.colorReveal ? 1 : 0,
     duration,
     ease: "power3.in",
@@ -84,6 +84,8 @@ ScrollTrigger.create({
 const hardExpoEase = gsap.parseEase("hardExpo");
 const EPS = 10;
 let snapping = false;
+/* false until the loader finishes — snap scrolling stays off */
+let booted = false;
 
 const siteHeader = document.querySelector(".site-header");
 
@@ -144,6 +146,11 @@ window.addEventListener(
     /* let the tuning GUI scroll without hijacking */
     if (event.target.closest?.(".lil-gui")) return;
 
+    if (!booted) {
+      event.preventDefault();
+      return;
+    }
+
     if (snapping) {
       event.preventDefault();
       return;
@@ -182,7 +189,7 @@ function coastDurationFor(speed) {
 }
 
 lenis.on("scroll", ({ scroll, velocity }) => {
-  if (snapping) return;
+  if (!booted || snapping) return;
 
   const { home, away } = zonePoints();
   if (scroll <= home + EPS || scroll >= away - EPS) return;
@@ -233,34 +240,7 @@ function sizeGL() {
 sizeGL();
 window.addEventListener("resize", sizeGL);
 
-const uniforms = {
-  uTexture: { value: null },
-  /* smoothed screen velocities: x=left, y=top, z=width, w=height */
-  uVel: { value: new THREE.Vector4(0, 0, 0, 0) },
-  uReveal: { value: 0 },
-  uGrabCorner: { value: new THREE.Vector2(1, 1) },
-  uLagPower: { value: 1.4 },
-  uZDip: { value: 0.4 },
-  uBow: { value: 0.3 },
-  uRippleAmp: { value: 12 },
-  uRippleFreq: { value: 1.5 },
-  uRippleSpeed: { value: 6 },
-  uWrinkleAmp: { value: 0 },
-  uWrinkleFreq: { value: 12 },
-  uShade: { value: 0.5 },
-  uTime: { value: 0 },
-  uPlaneSize: { value: new THREE.Vector2(1, 1) },
-  uImageSize: { value: new THREE.Vector2(1, 1) },
-  uRadius: { value: 24 }, // 1.5rem, matches .media-card
-  /* duotone endpoints approximating the CSS grayscale + accent wash */
-  uColorDark: { value: new THREE.Color("#2b2bd5") },
-  uColorLight: { value: new THREE.Color("#dfe0ff") },
-};
-
-const material = new THREE.ShaderMaterial({
-  transparent: true,
-  uniforms,
-  vertexShader: /* glsl */ `
+const VERTEX_SHADER = /* glsl */ `
     uniform vec4 uVel;
     uniform vec2 uPlaneSize;
     uniform vec2 uGrabCorner;
@@ -320,8 +300,9 @@ const material = new THREE.ShaderMaterial({
       vUv = uv;
       gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
     }
-  `,
-  fragmentShader: /* glsl */ `
+`;
+
+const FRAGMENT_SHADER = /* glsl */ `
     uniform sampler2D uTexture;
     uniform vec2 uPlaneSize;
     uniform vec2 uImageSize;
@@ -330,6 +311,7 @@ const material = new THREE.ShaderMaterial({
     uniform vec3 uColorLight;
     uniform float uShade;
     uniform float uReveal;
+    uniform float uAlpha;
     varying vec2 vUv;
     varying float vDepth;
 
@@ -367,23 +349,189 @@ const material = new THREE.ShaderMaterial({
       float dist = length(max(d, 0.0)) + min(max(d.x, d.y), 0.0) - uRadius;
       float alpha = 1.0 - smoothstep(-1.0, 1.0, dist);
 
-      gl_FragColor = vec4(color, alpha);
+      gl_FragColor = vec4(color, alpha * uAlpha);
     }
-  `,
-});
+`;
 
-/* enough segments for a smooth curve */
-const plane = new THREE.Mesh(new THREE.PlaneGeometry(1, 1, 32, 32), material);
-plane.visible = false;
-scene.add(plane);
+/* ---------- Cloth plane factory ----------
+   One plane per image; each syncs to its DOM element's rect and gets
+   its own uniforms + velocity springs, so many cards can fly with
+   the cloth warp at once (loader stack + hero). */
 
-new THREE.TextureLoader().load(mediaImg.currentSrc || mediaImg.src, (tex) => {
-  tex.minFilter = THREE.LinearFilter;
-  uniforms.uTexture.value = tex;
-  uniforms.uImageSize.value.set(tex.image.width, tex.image.height);
-  plane.visible = true;
-  /* hand rendering over to WebGL; the DOM card keeps doing layout */
-  mediaCard.classList.add("gl-active");
+const clothPlanes = [];
+const planeGeometry = new THREE.PlaneGeometry(1, 1, 32, 32);
+const textureLoader = new THREE.TextureLoader();
+
+function createClothPlane({
+  el,
+  src,
+  zBase = 0,
+  isActive,
+  soften = 1,
+  grabCorner = null,
+}) {
+  /* 0..1 scale on the whole deformation: 1 = full tuned cloth,
+     lower = calmer, more fluid motion (used by the loader) */
+  let softenValue = soften;
+  /* per-plane grab corner override (loader flights pull from their
+     leading edge); null falls back to the GUI's deform.corner */
+  let grabCornerValue = grabCorner;
+  const uniforms = {
+    uTexture: { value: null },
+    /* smoothed screen velocities: x=left, y=top, z=width, w=height */
+    uVel: { value: new THREE.Vector4(0, 0, 0, 0) },
+    uReveal: { value: 0 },
+    uAlpha: { value: 1 },
+    uGrabCorner: { value: new THREE.Vector2(1, 1) },
+    uLagPower: { value: 1 },
+    uZDip: { value: 0 },
+    uBow: { value: 0 },
+    uRippleAmp: { value: 0 },
+    uRippleFreq: { value: 0 },
+    uRippleSpeed: { value: 0 },
+    uWrinkleAmp: { value: 0 },
+    uWrinkleFreq: { value: 1 },
+    uShade: { value: 0 },
+    uTime: { value: 0 },
+    uPlaneSize: { value: new THREE.Vector2(1, 1) },
+    uImageSize: { value: new THREE.Vector2(1, 1) },
+    uRadius: { value: 24 }, // 1.5rem, matches .media-card
+    /* duotone endpoints approximating the CSS grayscale + accent wash */
+    uColorDark: { value: new THREE.Color("#2b2bd5") },
+    uColorLight: { value: new THREE.Color("#dfe0ff") },
+  };
+
+  const mesh = new THREE.Mesh(
+    planeGeometry,
+    new THREE.ShaderMaterial({
+      transparent: true,
+      /* stacking is decided purely by renderOrder: every plane stays
+         at z=0 so it matches its DOM rect exactly (a real z offset
+         would scale it up through the perspective camera) */
+      depthTest: false,
+      depthWrite: false,
+      uniforms,
+      vertexShader: VERTEX_SHADER,
+      fragmentShader: FRAGMENT_SHADER,
+    }),
+  );
+  mesh.visible = false;
+  mesh.renderOrder = zBase;
+  scene.add(mesh);
+
+  const ready = new Promise((resolve) => {
+    textureLoader.load(
+      src,
+      (tex) => {
+        tex.minFilter = THREE.LinearFilter;
+        uniforms.uTexture.value = tex;
+        uniforms.uImageSize.value.set(tex.image.width, tex.image.height);
+        mesh.visible = true;
+        /* hand rendering over to WebGL; the DOM card keeps layout */
+        el.classList.add("gl-active");
+        resolve();
+      },
+      undefined,
+      () => resolve(), // on error the DOM <img> stays visible
+    );
+  });
+
+  let lastRect = null;
+  const edgeVel = [0, 0, 0, 0];
+  const edgeSpr = [0, 0, 0, 0];
+
+  function update(time) {
+    const rect = el.getBoundingClientRect();
+
+    mesh.scale.set(rect.width, rect.height, 1);
+    mesh.position.set(
+      rect.left + rect.width / 2 - window.innerWidth / 2,
+      window.innerHeight / 2 - (rect.top + rect.height / 2),
+      0,
+    );
+    uniforms.uPlaneSize.value.set(rect.width, rect.height);
+
+    /* live-sync GUI params so sliders act mid-animation too,
+       scaled by this plane's soften factor */
+    const s = softenValue;
+    uniforms.uTime.value = time;
+    uniforms.uLagPower.value = deform.lagPower;
+    uniforms.uZDip.value = deform.zDip * s;
+    uniforms.uBow.value = deform.bow * s;
+    uniforms.uRippleAmp.value = deform.rippleAmp * s;
+    uniforms.uRippleFreq.value = deform.rippleFreq;
+    uniforms.uRippleSpeed.value = deform.rippleSpeed;
+    uniforms.uWrinkleAmp.value = deform.wrinkleAmp * s;
+    uniforms.uWrinkleFreq.value = deform.wrinkleFreq;
+    uniforms.uShade.value = deform.shade * s;
+    uniforms.uGrabCorner.value.set(
+      ...CORNERS[grabCornerValue ?? deform.corner],
+    );
+
+    /* raw per-edge velocities: movement AND resize of the card */
+    if (lastRect === null) lastRect = rect;
+    const raw = [
+      rect.left - lastRect.left,
+      rect.top - lastRect.top,
+      rect.width - lastRect.width,
+      rect.height - lastRect.height,
+    ];
+    lastRect = rect;
+
+    /* deform only while this card is actually in motion */
+    const active = isActive();
+    const { intensity, maxPull, stiffness, damping } = deform;
+
+    for (let i = 0; i < 4; i++) {
+      const target = active
+        ? gsap.utils.clamp(-maxPull, maxPull, raw[i] * intensity * s)
+        : 0;
+      edgeSpr[i] += (target - edgeVel[i]) * stiffness;
+      edgeSpr[i] *= damping;
+      edgeVel[i] += edgeSpr[i];
+    }
+    uniforms.uVel.value.set(edgeVel[0], edgeVel[1], edgeVel[2], edgeVel[3]);
+
+    /* whole-plane 3D lean into the mean motion */
+    const meanX = edgeVel[0] + 0.5 * edgeVel[2];
+    const meanY = edgeVel[1] + 0.5 * edgeVel[3];
+    mesh.rotation.x = meanY * deform.tilt * s * 0.002;
+    mesh.rotation.y = -meanX * deform.tilt * s * 0.002;
+  }
+
+  const plane = {
+    el,
+    mesh,
+    uniforms,
+    update,
+    ready,
+    get soften() {
+      return softenValue;
+    },
+    set soften(v) {
+      softenValue = v;
+    },
+    get grabCorner() {
+      return grabCornerValue;
+    },
+    set grabCorner(v) {
+      grabCornerValue = v;
+    },
+  };
+  clothPlanes.push(plane);
+  return plane;
+}
+
+/* hero image plane: cloth active during the Flip or a loader flight.
+   Starts softened for the gentle loader motion; restored to the full
+   tuned cloth once the page is handed over to scrolling. */
+const heroPlane = createClothPlane({
+  el: mediaCard,
+  src: mediaImg.currentSrc || mediaImg.src,
+  zBase: 60,
+  soften: 0.35,
+  isActive: () =>
+    (flipTween && flipTween.isActive()) || gsap.isTweening(mediaCard),
 });
 
 /* ---------- Deformation tuning GUI ---------- */
@@ -460,67 +608,150 @@ gui
   .name("copy config");
 gui.add({ reset: () => gui.reset() }, "reset").name("reset all");
 
-/* Per-edge screen velocities (left, top, width, height), each run
-   through an underdamped spring so the cloth reacts, overshoots and
-   wobbles. Gated to the Flip: the cloth only deforms while the card
-   is actually shifting between sections — plain scrolling stays flat. */
-let lastRect = null;
-const edgeVel = [0, 0, 0, 0]; // smoothed L, T, W, H velocity
-const edgeSpr = [0, 0, 0, 0]; // spring velocities
-
+/* one ticker drives every cloth plane */
 gsap.ticker.add((time) => {
-  const rect = mediaCard.getBoundingClientRect();
-
-  plane.scale.set(rect.width, rect.height, 1);
-  plane.position.set(
-    rect.left + rect.width / 2 - window.innerWidth / 2,
-    window.innerHeight / 2 - (rect.top + rect.height / 2),
-    0,
-  );
-  uniforms.uPlaneSize.value.set(rect.width, rect.height);
-
-  /* live-sync every GUI param so sliders act mid-animation too */
-  uniforms.uTime.value = time;
-  uniforms.uLagPower.value = deform.lagPower;
-  uniforms.uZDip.value = deform.zDip;
-  uniforms.uBow.value = deform.bow;
-  uniforms.uRippleAmp.value = deform.rippleAmp;
-  uniforms.uRippleFreq.value = deform.rippleFreq;
-  uniforms.uRippleSpeed.value = deform.rippleSpeed;
-  uniforms.uWrinkleAmp.value = deform.wrinkleAmp;
-  uniforms.uWrinkleFreq.value = deform.wrinkleFreq;
-  uniforms.uShade.value = deform.shade;
-  uniforms.uGrabCorner.value.set(...CORNERS[deform.corner]);
-
-  /* raw per-edge velocities: movement AND resize of the card */
-  if (lastRect === null) lastRect = rect;
-  const raw = [
-    rect.left - lastRect.left,
-    rect.top - lastRect.top,
-    rect.width - lastRect.width,
-    rect.height - lastRect.height,
-  ];
-  lastRect = rect;
-
-  /* deform only while the Flip is moving the card */
-  const active = flipTween && flipTween.isActive();
-  const { intensity, maxPull, stiffness, damping } = deform;
-
-  for (let i = 0; i < 4; i++) {
-    const target = active
-      ? gsap.utils.clamp(-maxPull, maxPull, raw[i] * intensity)
-      : 0;
-    edgeSpr[i] += (target - edgeVel[i]) * stiffness;
-    edgeSpr[i] *= damping;
-    edgeVel[i] += edgeSpr[i];
-  }
-  uniforms.uVel.value.set(edgeVel[0], edgeVel[1], edgeVel[2], edgeVel[3]);
-
-  /* whole-plane 3D lean into the mean motion */
-  const meanX = edgeVel[0] + 0.5 * edgeVel[2];
-  const meanY = edgeVel[1] + 0.5 * edgeVel[3];
-  plane.rotation.x = meanY * deform.tilt * 0.002;
-  plane.rotation.y = -meanX * deform.tilt * 0.002;
-
+  for (const p of clothPlanes) p.update(time);
   renderer.render(scene, camera);
 });
+
+/* ---------- Loader ----------
+   A progress counter runs while 12 images fly in from the sides with
+   the cloth warp and stack in the center. The top one is the hero
+   image; when loading completes it Flips into the hero section and
+   the hero content animates in with it. */
+
+const loaderEl = document.querySelector(".loader");
+const loaderCount = document.querySelector(".loader__count");
+const loaderSlot = document.querySelector(".media-slot--loader");
+const stackCards = gsap.utils.toArray(".media-card--stack");
+
+const heroBits = [
+  document.querySelector(".site-header"),
+  document.querySelector(".approach__title"),
+  document.querySelector(".approach__text"),
+  document.querySelector(".approach__content .pill-btn"),
+  document.querySelector(".approach__meta"),
+];
+
+/* freeze the page AT THE TOP and stage the hero card on the stack:
+   no scrolling (or restored scroll position) until the hero lands */
+history.scrollRestoration = "manual";
+window.scrollTo(0, 0);
+lenis.scrollTo(0, { immediate: true, force: true });
+lenis.stop();
+document.documentElement.style.overflow = "hidden";
+gsap.set(heroBits, { opacity: 0, y: 40 });
+loaderSlot.appendChild(mediaCard);
+/* hero flies in from the right (odd index) → pulled by its left edge */
+heroPlane.grabCorner = "top-left";
+/* full original colour on the loading screen; the glide to the hero
+   sweeps it back to the duotone (moveMediaTo tweens uReveal to 0) */
+heroPlane.uniforms.uReveal.value = 1;
+
+const stackPlanes = stackCards.map((card, i) =>
+  createClothPlane({
+    el: card,
+    src: card.querySelector("img").src,
+    zBase: (i + 1) * 3,
+    soften: 0.35,
+    /* opposite pull for opposite directions: cards from the left are
+       grabbed by their right (leading) corner, and vice versa */
+    grabCorner: i % 2 ? "top-left" : "top-right",
+    isActive: () => gsap.isTweening(card),
+  }),
+);
+
+/* stack images show their original colours, no duotone */
+stackPlanes.forEach((p) => (p.uniforms.uReveal.value = 1));
+
+Promise.all(clothPlanes.map((p) => p.ready)).then(() => {
+  const flyers = [...stackCards, mediaCard];
+  /* mostly sequential: each image lands on top of the previous one */
+  const STAGGER = 0.45;
+  const FLIGHT = 0.9;
+
+  const tl = gsap.timeline({ onComplete: finishLoader });
+
+  flyers.forEach((el, i) => {
+    const side = i % 2 ? 1 : -1;
+    tl.fromTo(
+      el,
+      {
+        x: side * (window.innerWidth / 2 + el.getBoundingClientRect().width),
+      },
+      { x: 0, duration: FLIGHT, ease: "hardExpo" },
+      i * STAGGER,
+    );
+  });
+
+  /* progress counter runs across the whole stack sequence */
+  const counter = { value: 0 };
+  tl.to(
+    counter,
+    {
+      value: 100,
+      duration: tl.duration(),
+      ease: "none",
+      onUpdate: () => {
+        loaderCount.textContent = Math.round(counter.value) + "%";
+      },
+    },
+    0,
+  );
+});
+
+function finishLoader() {
+  gsap.set(mediaCard, { clearProps: "x" });
+
+  /* a short beat at 100%, then the centre image glides smoothly
+     (long, gentle, still softened) from the stack into the hero */
+  gsap.delayedCall(0.35, () => {
+    heroPlane.soften = 0.5;
+    moveMediaTo(homeSlot, 1.6);
+  });
+
+  /* loader melts away — DOM overlay and GL stack planes together */
+  gsap.to(loaderEl, {
+    opacity: 0,
+    duration: 0.7,
+    delay: 0.5,
+    onComplete: () => loaderEl.remove(),
+  });
+  gsap.to(loaderCount, {
+    opacity: 0,
+    duration: 0.4,
+    delay: 0.35,
+    onComplete: () => loaderCount.remove(),
+  });
+  stackPlanes.forEach((p) => {
+    gsap.to(p.uniforms.uAlpha, {
+      value: 0,
+      duration: 0.55,
+      delay: 0.45,
+      onComplete: () => {
+        scene.remove(p.mesh);
+        clothPlanes.splice(clothPlanes.indexOf(p), 1);
+      },
+    });
+  });
+
+  /* hero content rides in with the landing image */
+  gsap.to(heroBits, {
+    opacity: 1,
+    y: 0,
+    duration: 1.2,
+    ease: "hardExpo",
+    stagger: 0.08,
+    delay: 0.65,
+  });
+
+  /* hand the page back once the flight has landed; the full tuned
+     cloth + GUI grab corner come back for the scroll-snap flights */
+  gsap.delayedCall(2.1, () => {
+    heroPlane.soften = 1;
+    heroPlane.grabCorner = null;
+    document.documentElement.style.overflow = "";
+    lenis.start();
+    booted = true;
+  });
+}

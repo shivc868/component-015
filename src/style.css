@@ -12,6 +12,12 @@
   --accent: #4b4bee;
 }
 
+html {
+  /* keep the scrollbar gutter reserved so toggling overflow during
+     the loader never shifts the layout */
+  scrollbar-gutter: stable;
+}
+
 body {
   background: var(--bg);
   color: var(--ink);
@@ -263,6 +269,52 @@ body {
   width: 100%;
   height: 75vh;
   aspect-ratio: auto;
+}
+
+/* ---------- Loader ---------- */
+
+/* Overlay sits above the page but below the GL canvas (z 5), so the
+   cloth planes fly over it while it hides the hero behind */
+.loader {
+  position: fixed;
+  inset: 0;
+  z-index: 4;
+  background: var(--bg);
+  display: grid;
+  place-items: center;
+}
+
+.loader__stack {
+  position: relative;
+  width: min(44rem, 72vw);
+  aspect-ratio: 16 / 10;
+}
+
+.loader__stack .media-card--stack,
+.media-slot--loader {
+  position: absolute;
+  inset: 0;
+}
+
+/* loader images keep their original colours — no duotone overlay
+   (applies to the DOM fallback; the GL planes use uReveal = 1) */
+.media-card--stack img {
+  filter: none;
+}
+
+.media-card--stack::after {
+  content: none;
+}
+
+.loader__count {
+  position: fixed;
+  right: 3rem;
+  bottom: 2.5rem;
+  z-index: 6;
+  font-size: clamp(2.5rem, 5vw, 4rem);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ---------- Responsive ---------- */
