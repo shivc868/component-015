@@ -43,6 +43,15 @@ body {
   padding: 5rem 3rem 0;
 }
 
+/* Section heading, top-left corner */
+.approach__heading {
+  grid-column: 1 / -1;
+  justify-self: start;
+  font-size: clamp(1.75rem, 3vw, 2.75rem);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
 /* Slots reserve layout space; the card Flips between them */
 .media-slot {
   aspect-ratio: 16 / 10;
@@ -84,6 +93,29 @@ body {
   background: var(--accent);
   mix-blend-mode: color;
   pointer-events: none;
+}
+
+/* ---------- WebGL fluid layer ---------- */
+
+/* Fullscreen transparent canvas the Three.js plane renders into */
+.gl-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* Once the texture is ready, WebGL renders the image; the DOM card
+   goes invisible but keeps its box for layout + Flip measurement */
+.media-card.gl-active {
+  background: transparent;
+}
+
+.media-card.gl-active img,
+.media-card.gl-active::after {
+  opacity: 0;
 }
 
 /* Right: body copy + pill button */
