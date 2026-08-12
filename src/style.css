@@ -31,7 +31,51 @@ body {
   text-transform: uppercase;
 }
 
-/* ---------- Approach section ---------- */
+/* ---------- Site header ---------- */
+
+.site-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  max-width: 100rem;
+  margin: 0 auto;
+  padding: 2rem 3rem;
+}
+
+.site-header__logo {
+  font-size: 1.15rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+.site-header__logo sup {
+  font-size: 0.6em;
+  font-weight: 500;
+}
+
+.site-header__nav {
+  display: flex;
+  gap: 2.5rem;
+}
+
+.site-header__nav a {
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 0.9rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.75;
+  transition: opacity 0.2s ease;
+}
+
+.site-header__nav a:hover {
+  opacity: 1;
+}
+
+/* ---------- Hero (approach) section ---------- */
 
 .approach {
   display: grid;
@@ -40,16 +84,17 @@ body {
   align-items: start;
   max-width: 100rem;
   margin: 0 auto;
-  padding: 5rem 3rem 0;
+  padding: 1.5rem 3rem 2.5rem;
+  /* fill the viewport below the header so the hero owns the fold */
+  min-height: calc(100vh - 5.75rem);
 }
 
-/* Section heading, top-left corner */
-.approach__heading {
-  grid-column: 1 / -1;
-  justify-self: start;
-  font-size: clamp(1.75rem, 3vw, 2.75rem);
+/* Big hero title, right column */
+.approach__title {
+  font-size: clamp(2.5rem, 4.5vw, 4.25rem);
   font-weight: 500;
-  letter-spacing: -0.01em;
+  line-height: 0.9;
+  letter-spacing: -0.03em;
 }
 
 /* Slots reserve layout space; the card Flips between them */
@@ -57,9 +102,9 @@ body {
   aspect-ratio: 16 / 10;
 }
 
-/* Left: image slot, pushed down from the top */
+/* Left: image slot, aligned to the hero's bottom edge */
 .media-slot--home {
-  margin-top: 10rem;
+  align-self: end;
 }
 
 .media-card {
@@ -123,8 +168,42 @@ body {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 3.5rem;
-  padding-top: 3rem;
+  gap: 2rem;
+  align-self: stretch;
+}
+
+.approach__content .pill-btn {
+  margin-top: 1.5rem;
+}
+
+/* Bottom-right stats strip: anchors the hero's lower edge */
+.approach__meta {
+  margin-top: auto;
+  align-self: stretch;
+  display: flex;
+  gap: 4rem;
+  padding-top: 2rem;
+  border-top: 1px solid rgba(23, 23, 31, 0.12);
+}
+
+.approach__stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.approach__stat-num {
+  font-size: 1.85rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.approach__stat-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.55;
 }
 
 .approach__text {
@@ -139,8 +218,8 @@ body {
   align-items: center;
   gap: 0.75rem;
   padding: 1.1rem 2rem;
-  background: #fff;
-  color: var(--ink);
+  background: var(--accent);
+  color: #fff;
   border-radius: 999px;
   text-decoration: none;
   font-size: 0.95rem;
@@ -149,19 +228,21 @@ body {
   text-transform: uppercase;
   transition:
     transform 0.25s ease,
-    box-shadow 0.25s ease;
+    box-shadow 0.25s ease,
+    background-color 0.25s ease;
 }
 
 .pill-btn:hover {
+  background: #3a3ad9;
   transform: translateY(-2px);
-  box-shadow: 0 10px 30px rgba(23, 23, 31, 0.12);
+  box-shadow: 0 12px 30px rgba(75, 75, 238, 0.35);
 }
 
 .pill-btn__dot {
   width: 0.5rem;
   height: 0.5rem;
   border-radius: 50%;
-  background: var(--ink);
+  background: #fff;
 }
 
 /* ---------- Showcase section (Flip target) ---------- */

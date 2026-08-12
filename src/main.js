@@ -85,9 +85,16 @@ const hardExpoEase = gsap.parseEase("hardExpo");
 const EPS = 10;
 let snapping = false;
 
+const siteHeader = document.querySelector(".site-header");
+
 function zonePoints() {
   const y = lenis.scroll;
-  const home = approachSection.getBoundingClientRect().top + y;
+  /* home sits above the hero by the header's height, so snapping up
+     lands at the page top with the header in view */
+  const home =
+    approachSection.getBoundingClientRect().top +
+    y -
+    (siteHeader?.offsetHeight ?? 0);
   const rect = awaySlot.getBoundingClientRect();
   const away = rect.top + y - (window.innerHeight - rect.height) / 2;
   return { home, away };
