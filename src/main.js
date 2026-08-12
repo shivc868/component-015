@@ -225,19 +225,55 @@ lenis.on("scroll", ({ scroll, velocity }) => {
 
 const mediaImg = mediaCard.querySelector("img");
 
+/* ---------- Device tier ----------
+   Weak devices start with a lighter GL pipeline: 1x pixel ratio and a
+   coarser cloth mesh. The watchdog in the render loop drops quality
+   further if measured frame times say the device still can't keep up. */
+const LOW_END =
+  (navigator.hardwareConcurrency || 8) <= 4 ||
+  (navigator.deviceMemory ?? 8) <= 4;
+
+let maxDPR = LOW_END ? 1 : 2;
+const PLANE_SEGMENTS = LOW_END ? 12 : 32;
+
 const glCanvas = document.createElement("canvas");
 glCanvas.className = "gl-canvas";
-document.body.appendChild(glCanvas);
 
-const renderer = new THREE.WebGLRenderer({
-  canvas: glCanvas,
+/* WebGL is an enhancement, not a requirement: if a context is refused
+   (no GL at all, or only a slow software rasterizer — that's what
+   failIfMajorPerformanceCaveat rejects), the DOM cards render instead.
+   The loader, Flip and snap scroll all still run, just without the
+   cloth warp, which is far smoother than software-rendered WebGL.
+
+   The context is probed BEFORE constructing WebGLRenderer: a failed
+   creation inside three fires canvas error events whose handlers can
+   throw, so on refusal three must never touch the canvas at all. */
+const GL_ATTRS = {
   alpha: true,
   /* the rounded-box SDF in the fragment shader already feathers every
      visible edge of the plane, so MSAA only costs fill rate at 2x DPR */
   antialias: false,
   powerPreference: "high-performance",
-});
-renderer.setClearColor(0x000000, 0);
+  failIfMajorPerformanceCaveat: true,
+};
+
+let renderer = null;
+try {
+  const glContext =
+    glCanvas.getContext("webgl2", GL_ATTRS) ||
+    glCanvas.getContext("webgl", GL_ATTRS);
+  if (glContext) {
+    renderer = new THREE.WebGLRenderer({
+      canvas: glCanvas,
+      context: glContext,
+      ...GL_ATTRS,
+    });
+    renderer.setClearColor(0x000000, 0);
+    document.body.appendChild(glCanvas);
+  }
+} catch {
+  renderer = null;
+}
 
 /* render-on-demand: the scene only re-renders when a plane is moving
    or something GL-visible changed (uniform tween, resize, GUI edit).
@@ -249,8 +285,9 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(45, 1, 10, 4000);
 
 function sizeGL() {
+  if (!renderer) return;
   const { innerWidth: w, innerHeight: h } = window;
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, maxDPR));
   renderer.setSize(w, h);
   camera.aspect = w / h;
   /* place the camera so 1 world unit == 1 CSS pixel at z = 0 */
@@ -383,7 +420,12 @@ const FRAGMENT_SHADER = /* glsl */ `
    the cloth warp at once (loader stack + hero). */
 
 const clothPlanes = [];
-const planeGeometry = new THREE.PlaneGeometry(1, 1, 32, 32);
+const planeGeometry = new THREE.PlaneGeometry(
+  1,
+  1,
+  PLANE_SEGMENTS,
+  PLANE_SEGMENTS,
+);
 const textureLoader = new THREE.TextureLoader();
 
 function createClothPlane({
@@ -394,6 +436,24 @@ function createClothPlane({
   soften = 1,
   grabCorner = null,
 }) {
+  /* DOM-only fallback: no mesh, no per-frame work. The card's own
+     <img> + CSS duotone stay visible; uniform stubs keep the tweens
+     that target them (uReveal / uAlpha) harmless no-ops. `ready`
+     still waits for the image so the loader flight has no pop-in. */
+  if (!renderer) {
+    const img = el.querySelector("img");
+    const stub = {
+      el,
+      uniforms: { uReveal: { value: 0 }, uAlpha: { value: 1 } },
+      update: () => false,
+      ready: img?.decode ? img.decode().catch(() => {}) : Promise.resolve(),
+      soften,
+      grabCorner,
+    };
+    clothPlanes.push(stub);
+    return stub;
+  }
+
   /* 0..1 scale on the whole deformation: 1 = full tuned cloth,
      lower = calmer, more fluid motion (used by the loader) */
   let softenValue = soften;
@@ -660,12 +720,35 @@ if (new URLSearchParams(location.search).has("debug")) {
 }
 
 /* one ticker drives every cloth plane; the draw is skipped on frames
-   where no plane moved and nothing GL-visible changed */
-gsap.ticker.add((time) => {
+   where no plane moved and nothing GL-visible changed.
+
+   Quality watchdog: only frames we actually rendered are sampled — if
+   a stretch of them misses ~40fps, the pixel ratio steps down
+   (2 → 1.5 → 1). Fill rate dominates on weak GPUs, and a slightly
+   softer image is invisible next to a dropped frame. */
+let sampleFrames = 0;
+let slowFrames = 0;
+
+gsap.ticker.add((time, deltaTime) => {
   let needsRender = glDirty;
   glDirty = false;
   for (const p of clothPlanes) needsRender = p.update(time) || needsRender;
-  if (needsRender) renderer.render(scene, camera);
+  if (!renderer || !needsRender) return;
+
+  renderer.render(scene, camera);
+
+  if (maxDPR > 1 && window.devicePixelRatio > 1) {
+    sampleFrames++;
+    if (deltaTime > 25) slowFrames++;
+    if (sampleFrames >= 90) {
+      if (slowFrames > sampleFrames * 0.4) {
+        maxDPR = Math.max(1, maxDPR - 0.5);
+        sizeGL();
+        markGLDirty();
+      }
+      sampleFrames = slowFrames = 0;
+    }
+  }
 });
 
 /* ---------- Loader ----------
@@ -807,7 +890,7 @@ function finishLoader() {
       delay: 0.45,
       onUpdate: markGLDirty,
       onComplete: () => {
-        scene.remove(p.mesh);
+        if (p.mesh) scene.remove(p.mesh);
         clothPlanes.splice(clothPlanes.indexOf(p), 1);
         markGLDirty();
       },
