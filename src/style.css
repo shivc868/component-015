@@ -29,6 +29,9 @@ body {
 
 .spacer {
   height: 100vh;
+  /* small viewport height: stable on mobile while the browser
+     chrome collapses/expands */
+  height: 100svh;
   display: grid;
   place-items: center;
   color: rgba(23, 23, 31, 0.35);
@@ -322,6 +325,14 @@ body {
 /* ---------- Responsive ---------- */
 
 @media (max-width: 900px) {
+  .site-header {
+    padding: 1.5rem;
+  }
+
+  .site-header__nav {
+    gap: 1.5rem;
+  }
+
   .approach {
     grid-template-columns: 1fr;
     row-gap: 3rem;
@@ -339,5 +350,87 @@ body {
     order: 1;
     gap: 3rem;
     padding-top: 0;
+  }
+
+  /* Stats can wrap instead of overflowing */
+  .approach__meta {
+    flex-wrap: wrap;
+    gap: 2rem 2.5rem;
+  }
+
+  .showcase__container {
+    padding: 0 1.5rem;
+  }
+
+  /* 75vh of a narrow viewport is a skinny tower of cropped image;
+     a shorter landing slot keeps the photo readable on phones */
+  .showcase .media-slot--away {
+    height: 60vh;
+    height: 60svh;
+  }
+
+  .loader__count {
+    right: 1.5rem;
+    bottom: 1.5rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .site-header {
+    padding: 1.25rem 1rem;
+  }
+
+  .site-header__nav {
+    gap: 1rem;
+  }
+
+  .site-header__nav a {
+    font-size: 0.8rem;
+    letter-spacing: 0.05em;
+  }
+
+  .approach {
+    padding: 2rem 1rem 4rem;
+    row-gap: 2.5rem;
+  }
+
+  .approach__content {
+    gap: 2rem;
+  }
+
+  .approach__title {
+    font-size: clamp(2rem, 9vw, 2.5rem);
+  }
+
+  .approach__text {
+    font-size: 1.15rem;
+    letter-spacing: -0.02em;
+  }
+
+  .pill-btn {
+    padding: 0.9rem 1.6rem;
+    font-size: 0.85rem;
+  }
+
+  .approach__stat-num {
+    font-size: 1.5rem;
+  }
+
+  .media-card,
+  .media-card img {
+    border-radius: 1rem;
+  }
+
+  .showcase__container {
+    padding: 0 1rem;
+  }
+
+  .showcase .media-slot--away {
+    height: 50vh;
+    height: 50svh;
+  }
+
+  .loader__stack {
+    width: min(30rem, 78vw);
   }
 }

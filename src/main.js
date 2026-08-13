@@ -298,6 +298,10 @@ sizeGL();
 window.addEventListener("resize", () => {
   zoneCache = null;
   sizeGL();
+  /* corner radius can change across the responsive breakpoints */
+  for (const p of clothPlanes) {
+    if (p.uniforms.uRadius) p.uniforms.uRadius.value = cardRadius(p.el);
+  }
   markGLDirty();
 });
 
@@ -420,6 +424,13 @@ const FRAGMENT_SHADER = /* glsl */ `
    the cloth warp at once (loader stack + hero). */
 
 const clothPlanes = [];
+
+/* the card's CSS corner radius in px (it changes at the mobile
+   breakpoints), so the GL rounded-box SDF always matches the DOM */
+function cardRadius(el) {
+  return parseFloat(getComputedStyle(el).borderRadius) || 0;
+}
+
 const planeGeometry = new THREE.PlaneGeometry(
   1,
   1,
@@ -479,7 +490,7 @@ function createClothPlane({
     uTime: { value: 0 },
     uPlaneSize: { value: new THREE.Vector2(1, 1) },
     uImageSize: { value: new THREE.Vector2(1, 1) },
-    uRadius: { value: 24 }, // 1.5rem, matches .media-card
+    uRadius: { value: cardRadius(el) }, // matches .media-card's CSS radius
     /* duotone endpoints approximating the CSS grayscale + accent wash */
     uColorDark: { value: new THREE.Color("#2b2bd5") },
     uColorLight: { value: new THREE.Color("#dfe0ff") },
