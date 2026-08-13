@@ -216,6 +216,33 @@ lenis.on("scroll", ({ scroll, velocity }) => {
   );
 });
 
+/* ---------- Mobile menu ---------- */
+
+const menuBtn = document.querySelector(".menu-btn");
+
+function setMenu(open) {
+  if (document.documentElement.classList.contains("nav-open") === open) return;
+  document.documentElement.classList.toggle("nav-open", open);
+  menuBtn.setAttribute("aria-expanded", String(open));
+  menuBtn.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+  /* freeze the page behind the overlay; on close, only hand scrolling
+     back if the loader has already released the page */
+  if (open) {
+    lenis.stop();
+    document.documentElement.style.overflow = "hidden";
+  } else if (booted) {
+    lenis.start();
+    document.documentElement.style.overflow = "";
+  }
+}
+
+menuBtn.addEventListener("click", () =>
+  setMenu(!document.documentElement.classList.contains("nav-open")),
+);
+document
+  .querySelectorAll(".site-header__nav a")
+  .forEach((a) => a.addEventListener("click", () => setMenu(false)));
+
 /* ---------- Three.js fluid media plane ----------
    The image is rendered as a WebGL plane on a transparent fixed
    canvas. Every frame the plane is synced to the DOM card's rect, so
@@ -297,6 +324,8 @@ function sizeGL() {
 sizeGL();
 window.addEventListener("resize", () => {
   zoneCache = null;
+  /* the overlay menu only exists on mobile widths */
+  if (window.innerWidth > 900) setMenu(false);
   sizeGL();
   /* corner radius can change across the responsive breakpoints */
   for (const p of clothPlanes) {

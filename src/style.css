@@ -84,6 +84,49 @@ body {
   opacity: 1;
 }
 
+/* ---------- Mobile menu button (hidden on desktop) ---------- */
+
+.menu-btn {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  /* stays clickable above the open nav overlay */
+  position: relative;
+  z-index: 60;
+}
+
+.menu-btn span {
+  display: block;
+  width: 1.5rem;
+  height: 2px;
+  margin: 0 auto;
+  border-radius: 999px;
+  background: var(--ink);
+  transition:
+    transform 0.3s ease,
+    opacity 0.2s ease;
+}
+
+/* hamburger -> X while the menu is open */
+.nav-open .menu-btn span:nth-child(1) {
+  transform: translateY(calc(0.4rem + 2px)) rotate(45deg);
+}
+
+.nav-open .menu-btn span:nth-child(2) {
+  opacity: 0;
+}
+
+.nav-open .menu-btn span:nth-child(3) {
+  transform: translateY(calc(-0.4rem - 2px)) rotate(-45deg);
+}
+
 /* ---------- Hero (approach) section ---------- */
 
 .approach {
@@ -329,33 +372,82 @@ body {
     padding: 1.5rem;
   }
 
+  .menu-btn {
+    display: flex;
+  }
+
+  /* inline links become a full-screen overlay toggled by the burger */
   .site-header__nav {
-    gap: 1.5rem;
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: var(--bg);
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2.5rem;
+    opacity: 0;
+    visibility: hidden;
+    transition:
+      opacity 0.35s ease,
+      visibility 0.35s ease;
+  }
+
+  .site-header__nav a {
+    font-size: 1.5rem;
+    letter-spacing: 0.1em;
+    opacity: 1;
+    transform: translateY(0.75rem);
+    transition:
+      transform 0.4s ease,
+      opacity 0.2s ease;
+  }
+
+  .nav-open .site-header__nav {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .nav-open .site-header__nav a {
+    transform: translateY(0);
   }
 
   .approach {
     grid-template-columns: 1fr;
-    row-gap: 3rem;
-    padding: 3rem 1.5rem 5rem;
-    min-height: auto;
+    /* content row soaks up the spare height, so the stats (pushed down
+       by their margin-top: auto) and the image always hug the bottom */
+    grid-template-rows: 1fr auto;
+    row-gap: 1.75rem;
+    padding: 1.5rem 1.5rem 2rem;
+    min-height: calc(100svh - 5.75rem);
   }
 
-  /* Content first, image below on small screens */
+  /* Content first, image below on small screens; cap the image height
+     so the whole hero — content AND image — fits the first screen */
+  /* fixed height instead of aspect-ratio: full container width, the
+     photo crops vertically via object-fit / the GL cover math */
   .media-slot--home {
     order: 2;
     margin-top: 0;
+    aspect-ratio: auto;
+    height: 32svh;
   }
 
   .approach__content {
     order: 1;
-    gap: 3rem;
+    gap: 1.5rem;
     padding-top: 0;
+  }
+
+  .approach__content .pill-btn {
+    margin-top: 0.5rem;
   }
 
   /* Stats can wrap instead of overflowing */
   .approach__meta {
     flex-wrap: wrap;
-    gap: 2rem 2.5rem;
+    gap: 1.5rem 2rem;
+    padding-top: 1.5rem;
   }
 
   .showcase__container {
@@ -380,40 +472,59 @@ body {
     padding: 1.25rem 1rem;
   }
 
-  .site-header__nav {
-    gap: 1rem;
-  }
-
-  .site-header__nav a {
-    font-size: 0.8rem;
-    letter-spacing: 0.05em;
-  }
-
   .approach {
-    padding: 2rem 1rem 4rem;
-    row-gap: 2.5rem;
+    padding: 0.75rem 1rem 1.25rem;
+    row-gap: 1rem;
+    min-height: calc(100svh - 5.25rem);
   }
 
   .approach__content {
-    gap: 2rem;
+    gap: 1rem;
   }
 
   .approach__title {
-    font-size: clamp(2rem, 9vw, 2.5rem);
+    font-size: clamp(1.5rem, 7vw, 1.85rem);
   }
 
   .approach__text {
-    font-size: 1.15rem;
+    font-size: 0.95rem;
+    line-height: 1.4;
     letter-spacing: -0.02em;
   }
 
   .pill-btn {
-    padding: 0.9rem 1.6rem;
-    font-size: 0.85rem;
+    padding: 0.7rem 1.3rem;
+    font-size: 0.75rem;
+  }
+
+  .approach__content .pill-btn {
+    margin-top: 0;
+  }
+
+  /* achievements: all three stats on one tight row */
+  .approach__meta {
+    flex-wrap: nowrap;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding-top: 0.75rem;
+  }
+
+  .approach__stat {
+    gap: 0.2rem;
   }
 
   .approach__stat-num {
-    font-size: 1.5rem;
+    font-size: 1.1rem;
+  }
+
+  .approach__stat-label {
+    font-size: 0.6rem;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+
+  .media-slot--home {
+    height: 26svh;
   }
 
   .media-card,
