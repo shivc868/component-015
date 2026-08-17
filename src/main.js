@@ -154,9 +154,6 @@ function snapTo(target, slot, duration = SNAP_DURATION) {
 window.addEventListener(
   "wheel",
   (event) => {
-    /* let the tuning GUI scroll without hijacking */
-    if (event.target.closest?.(".lil-gui")) return;
-
     if (!booted) {
       event.preventDefault();
       return;
@@ -303,7 +300,7 @@ try {
 }
 
 /* render-on-demand: the scene only re-renders when a plane is moving
-   or something GL-visible changed (uniform tween, resize, GUI edit).
+   or something GL-visible changed (uniform tween, resize).
    The last presented frame stays on the canvas while idle. */
 let glDirty = true;
 const markGLDirty = () => (glDirty = true);
@@ -498,7 +495,7 @@ function createClothPlane({
      lower = calmer, more fluid motion (used by the loader) */
   let softenValue = soften;
   /* per-plane grab corner override (loader flights pull from their
-     leading edge); null falls back to the GUI's deform.corner */
+     leading edge); null falls back to deform.corner */
   let grabCornerValue = grabCorner;
   const uniforms = {
     uTexture: { value: null },
@@ -576,8 +573,7 @@ function createClothPlane({
     );
     uniforms.uPlaneSize.value.set(rect.width, rect.height);
 
-    /* live-sync GUI params so sliders act mid-animation too,
-       scaled by this plane's soften factor */
+    /* deformation params, scaled by this plane's soften factor */
     const s = softenValue;
     uniforms.uTime.value = time;
     uniforms.uLagPower.value = deform.lagPower;
@@ -676,7 +672,7 @@ const heroPlane = createClothPlane({
     (flipTween && flipTween.isActive()) || gsap.isTweening(mediaCard),
 });
 
-/* ---------- Deformation tuning GUI ---------- */
+/* ---------- Deformation tuning ---------- */
 
 const deform = {
   /* pull */
@@ -709,55 +705,6 @@ const CORNERS = {
   "bottom-left": [0, 0],
   center: [0.5, 0.5],
 };
-
-/* the panel only exists behind ?debug, so lil-gui is loaded on demand
-   and stays out of the main bundle for regular visitors */
-if (new URLSearchParams(location.search).has("debug")) {
-  import("lil-gui").then(({ default: GUI }) => {
-    const gui = new GUI({ title: "Deformation" });
-
-    const fPull = gui.addFolder("Pull");
-    fPull.add(deform, "intensity", 0, 30, 0.01).name("pull intensity");
-    fPull.add(deform, "maxPull", 0, 1200, 1).name("max pull (px)");
-    fPull.add(deform, "lagPower", 0.1, 6, 0.01).name("lag curve");
-    fPull.add(deform, "corner", Object.keys(CORNERS)).name("grab corner");
-
-    const fSpring = gui.addFolder("Spring");
-    fSpring.add(deform, "stiffness", 0.005, 0.6, 0.005).name("stiffness");
-    fSpring.add(deform, "damping", 0.4, 0.995, 0.005).name("damping");
-
-    const fDepth = gui.addFolder("Depth");
-    fDepth.add(deform, "zDip", 0, 5, 0.01).name("z dip");
-    fDepth.add(deform, "bow", 0, 5, 0.01).name("bow");
-    fDepth.add(deform, "tilt", 0, 2, 0.01).name("3d tilt");
-    fDepth.add(deform, "shade", 0, 2, 0.01).name("fold shading");
-
-    const fCloth = gui.addFolder("Cloth detail");
-    fCloth.add(deform, "rippleAmp", 0, 500, 1).name("ripple amount");
-    fCloth.add(deform, "rippleFreq", 0, 25, 0.05).name("ripple waves");
-    fCloth.add(deform, "rippleSpeed", 0, 80, 0.1).name("ripple speed");
-    fCloth.add(deform, "wrinkleAmp", 0, 400, 1).name("wrinkle amount");
-    fCloth.add(deform, "wrinkleFreq", 1, 100, 0.5).name("wrinkle density");
-
-    gui.add(deform, "colorReveal").name("colour reveal");
-    gui
-      .add(
-        {
-          copy: () => {
-            const json = JSON.stringify(deform, null, 2);
-            navigator.clipboard?.writeText(json).catch(() => {});
-            console.log("deform config:\n" + json);
-          },
-        },
-        "copy",
-      )
-      .name("copy config");
-    gui.add({ reset: () => gui.reset() }, "reset").name("reset all");
-
-    /* slider edits must show even while every plane is at rest */
-    gui.onChange(markGLDirty);
-  });
-}
 
 /* one ticker drives every cloth plane; the draw is skipped on frames
    where no plane moved and nothing GL-visible changed.
@@ -951,7 +898,7 @@ function finishLoader() {
     .to(statEls, { opacity: 1, y: 0, duration: 1, stagger: 0.09 }, 0.7);
 
   /* hand the page back once the flight has landed; the full tuned
-     cloth + GUI grab corner come back for the scroll-snap flights */
+     cloth + default grab corner come back for the scroll-snap flights */
   gsap.delayedCall(2.1, () => {
     heroPlane.soften = 1;
     heroPlane.grabCorner = null;
